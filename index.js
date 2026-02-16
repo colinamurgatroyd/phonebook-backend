@@ -87,10 +87,10 @@ app.post('/api/persons', (request, response) => {
         }
         if (!body.name) {
             error = 'name is missing'
-        } else {
-            if (persons.find(person => person.name === body.name) !== undefined) {
-                error = 'name must be unique'
-            }            
+        // } else {
+        //     if (persons.find(person => person.name === body.name) !== undefined) {
+        //         error = 'name must be unique'
+        //     }            
         }
     }
 
