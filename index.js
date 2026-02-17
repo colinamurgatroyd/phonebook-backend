@@ -101,8 +101,9 @@ app.post('/api/persons', (request, response) => {
     }
 
     Person.find({name: name}).exec()
-        .then(foundPerson => {
-            if (foundPerson) {
+        .then(found => {
+            // find() returns an array so we need to check the length
+            if (found.length !== 0) {
                 return response.status(400).json({
                     error: 'person already exists!'
                 })
