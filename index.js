@@ -15,28 +15,28 @@ morgan.token('body', req => {
 
 app.use(morgan(':method :url :status :res[content-length] - :response-time ms :body'))
 
-let persons = [
-  {
-    id: "1",
-    name: "Arto Hellas",
-    number: "040-123456"
-  },
-  {
-    id: "2",
-    name: "Ada Lovelace",
-    number: "39-44-5323523"
-  },
-  {
-    id: "3",
-    name: "Dan Abramov",
-    number: "12-43-234345"
-  },
-  {
-    id: "4",
-    name: "Mary Poppendieck",
-    number: "39-23-6423122"
-  }
-]
+// let persons = [
+//   {
+//     id: "1",
+//     name: "Arto Hellas",
+//     number: "040-123456"
+//   },
+//   {
+//     id: "2",
+//     name: "Ada Lovelace",
+//     number: "39-44-5323523"
+//   },
+//   {
+//     id: "3",
+//     name: "Dan Abramov",
+//     number: "12-43-234345"
+//   },
+//   {
+//     id: "4",
+//     name: "Mary Poppendieck",
+//     number: "39-23-6423122"
+//   }
+// ]
 
 const cors = require('cors')
 app.use(cors())
@@ -53,47 +53,46 @@ app.get('/api/persons', (request, response) => {
         })
 })
 
-app.get('/api/persons/:id', (request, response) => {
-    // const id = request.params.id
-    // const person = persons.find(p => p.id === id)
-
-    // if (person) {
-    //     response.json(person)
-    // } else {
-    //     response.status(404).end()        
-    // }
-    Person.findById(request.params.id).then(person => {
-        response.json(person)
-    })
+app.get('/api/persons/:id', (request, response, next) => {
+    // Interesting. request.params.id is a string. But, a value like 123 as an
+    // integer is not malformatted since an integer is an acceptable id. So,
+    // should I also be trying to convert the id to an integer and, if that
+    //  works, use that as id to the call to findById (in the case where the
+    // string fails as id)?
+    Person.findById(request.params.id)
+        .then(person => {
+            if (person) {
+                response.json(person)
+            } else {
+                response.status(404).end()
+            }
+        })
+        .catch(error => next(error))
 })
 
 app.delete('/api/persons/:id', (request, response) => {
-    const id = request.params.id
-    persons = persons.filter(p => p.id != id)
-
-    response.status(204).end()
+    Person.findByIdAndDelete(request.params.id)
+        .then(result => {
+            response.status(204).end()
+        })
+        .catch(error => next(error))
 })
 
 app.post('/api/persons', (request, response) => {
-    const body = request.body
+    const {name, number} = request.body
 
     // Check for errors in the request
     let error = ''
-    if (!body.name && !body.number) {
+    if (!name && !number) {
         error = 'name and number are missing'
     } else {
-        if (!body.number) {
+        if (!number) {
             error = 'number is missing'
         }
-        if (!body.name) {
+        if (!name) {
             error = 'name is missing'
-        // } else {
-        //     if (persons.find(person => person.name === body.name) !== undefined) {
-        //         error = 'name must be unique'
-        //     }            
         }
     }
-
     if (error !== '') {
         // There's an error so return it now
         return response.status(400).json({
@@ -101,28 +100,42 @@ app.post('/api/persons', (request, response) => {
         })
     }
 
-    // Generating an id this way because the exercise asked to use Math.random.
-    // I don't particularly like that it can result in multple entries with the
-    // same id.
-    const id = Math.floor(Math.random() * 100000)
+    Person.find({name: name}).exec()
+        .then(foundPerson => {
+            if (foundPerson) {
+                return response.status(400).json({
+                    error: 'person already exists!'
+                })
+            } else {
+                const person = new Person({
+                    name: name,
+                    number: number
+                })
+                return person.save().then(savedPerson => {
+                    response.json(savedPerson)
+                })
+            }
+        })
+        .catch(error => next(error))
+})
 
-    // const person = {
-    //     id: id,
-    //     name: body.name,
-    //     number: body.number
-    // }
+app.put('/api/persons/:id', (request, response, next) => {
+    const {name, number} = request.body
 
-    // persons = persons.concat(person)
-
-    const person = new Person({
-        name: body.name,
-        number: body.number
-    })
-    console.log(person)
-    // response.json(person)
-    person.save().then(savedPerson => {
-        response.json(savedPerson)
-    })
+    Person.findById(request.params.id)
+        .then(person => {
+            if(!person) {
+                response.status(404).end()
+            }
+            // Update the number, the name shouldn't be changed so we leave it
+            // alone
+            person.number = number
+            return person.save()
+                .then(updatedPerson => {
+                    response.json(updatedPerson)
+                })
+        })
+        .catch(error => next(error))
 })
 
 const unknownEndpoint = (request, response) => {
@@ -130,6 +143,16 @@ const unknownEndpoint = (request, response) => {
 }
 
 app.use(unknownEndpoint)
+
+const errorHandler = (error, request, response, next) => {
+    console.log(error.message)
+
+    if (error.name === 'CastError') {
+        return response.status(400).send({error: 'malformatted id'})
+    }
+}
+
+app.use(errorHandler)
 
 const PORT = process.env.PORT
 app.listen(PORT)
